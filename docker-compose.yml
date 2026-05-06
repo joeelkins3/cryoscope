@@ -1,0 +1,52 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: cryoscope_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cryoscope
+      POSTGRES_USER: cryoscope
+      POSTGRES_PASSWORD: cryoscope_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cryoscope"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: cryoscope_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgres://cryoscope:cryoscope_secret@db:5432/cryoscope
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      NOAA_TOKEN: ${NOAA_TOKEN:-}
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build: ./frontend
+    container_name: cryoscope_ui
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:4000
+      VITE_MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+    ports:
+      - "3000:80"
+
+volumes:
+  pgdata:
